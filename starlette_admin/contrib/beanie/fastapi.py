@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional
 
 from fastapi import APIRouter, Query
@@ -49,4 +50,12 @@ class FastAPIModelView(ModelView):
         where: str = Query(""),
         order_by: List[str] = Query(["id asc"]),
     ):
+        if where is None:
+            where = ""
+
+        try:
+            where_json = json.loads(where)
+            return await super().find_all(request, skip, limit, where_json, order_by)
+        except json.JSONDecodeError:
+            pass
         return await super().find_all(request, skip, limit, where, order_by)
