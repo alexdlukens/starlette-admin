@@ -16,7 +16,7 @@ from typing import (
 
 import bson.errors
 import starlette_admin.fields as sa
-from beanie import Document, Link, PydanticObjectId
+from beanie import Document, Link, PydanticObjectId, BackLink
 from beanie.odm.operators.find import BaseFindOperator
 from beanie.operators import Or, RegEx, Text
 from pydantic import ValidationError
@@ -221,7 +221,7 @@ class ModelView(BaseModelView, Generic[T]):
     ) -> List[T]:
         docs = []
         for pk in pks:
-            doc = await self.document.get(pk)
+            doc = await self.document.get(pk, fetch_links=True, nesting_depth=1)
             if doc:
                 docs.append(doc)
         return docs
@@ -229,6 +229,8 @@ class ModelView(BaseModelView, Generic[T]):
     async def get_pk_value(self, request: Request, obj: Any) -> Any:
         if isinstance(obj, Link):
             return getattr(obj.ref, not_none(self.pk_attr))
+        if isinstance(obj, BackLink):
+            return None
 
         return getattr(obj, not_none(self.pk_attr))
 
@@ -245,7 +247,7 @@ class ModelView(BaseModelView, Generic[T]):
         return await doc.create()
 
     async def edit(self, request: Request, pk: PydanticObjectId, data: dict) -> T:
-        doc: Union[Document, None] = await self.document.get(pk)
+        doc: Union[Document, None] = await self.document.get(pk, fetch_links=True, nesting_depth=1)
         assert doc is not None, "Document not found"
         data = {
             k: v
