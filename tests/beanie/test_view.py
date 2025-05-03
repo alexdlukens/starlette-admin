@@ -2,9 +2,10 @@ import datetime
 import json
 import os
 from enum import Enum
-from typing import Annotated, Any, Dict
+from typing import Annotated, List
 
 import pymongo
+import pytest
 import pytest_asyncio
 from beanie import Document, Indexed, Link, init_beanie
 from beanie.operators import In
@@ -12,7 +13,6 @@ from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import Field, SecretStr
 from pymongo import IndexModel
-from requests import Request
 from starlette.applications import Starlette
 from starlette_admin.contrib.beanie import Admin, ModelView
 
@@ -39,7 +39,7 @@ class Product(Document):
 
 class Store(Document):
     name: str = Field(min_length=3)
-    products: list[Link[Product]] = []
+    products: List[Link[Product]] = []
 
 
 class User(Document):
@@ -61,39 +61,6 @@ class StoreLoginConfig(Document):
     password: SecretStr
     hostname: SecretStr
     store: Link[Store]
-
-
-class ProductView(ModelView):
-    exclude_fields_from_create = ["created_at"]
-    exclude_fields_from_edit = ["created_at"]
-
-    async def before_create(
-        self, request: Request, data: Dict[str, Any], obj: Any
-    ) -> None:
-        assert isinstance(obj, Product)
-        assert obj.id is None
-
-    async def after_create(self, request: Request, obj: Any) -> None:
-        assert isinstance(obj, Product)
-        assert obj.id is not None
-
-    async def before_edit(
-        self, request: Request, data: Dict[str, Any], obj: Any
-    ) -> None:
-        assert isinstance(obj, Product)
-        assert obj.id is not None
-
-    async def after_edit(self, request: Request, obj: Any) -> None:
-        assert isinstance(obj, Product)
-        assert obj.id is not None
-
-    async def before_delete(self, request: Request, obj: Any) -> None:
-        assert isinstance(obj, Product)
-        assert obj.id is not None
-
-    async def after_delete(self, request: Request, obj: Any) -> None:
-        assert isinstance(obj, Product)
-        assert obj.id is not None
 
 
 class ProductDescriptionTestView(ModelView):
@@ -119,6 +86,11 @@ class TestBeanieView:
         with open("./tests/data/products.json") as f:
             for product in json.load(f):
                 await Product(**product).save()
+
+        class ProductView(ModelView):
+            exclude_fields_from_create = [Product.created_at]
+            exclude_fields_from_edit = ["created_at"]
+
         admin = Admin()
         admin.add_view(ModelView(Store))
         admin.add_view(ProductView(Product))
@@ -289,6 +261,29 @@ class TestBeanieView:
         assert (await Product.count()) == 5
         assert (await Product.find(Product.brand == "Infinix").first_or_none()) is None
 
+    async def test_edit_excluded_field(self, client):
+        doc = await Product.find(Product.title == "IPhone 9").first_or_none()
+        id = doc.id
+        response = await client.post(
+            f"/admin/product/edit/{id}",
+            data={
+                "title": "IPhone 9",
+                "description": (
+                    "Infinix Inbook X1 Ci3 10th 8GB 256GB 14 Win10 Grey - 1 Year"
+                    " Warranty"
+                ),
+                "price": 1049,
+                "brand": "Infinix",
+                "created_at": "2023-01-01T00:00:00Z",
+            },
+        )
+        assert response.status_code == 303
+        assert (await Product.count()) == 5
+        # get the product again
+        doc2 = await Product.find(Product.title == "IPhone 9").first_or_none()
+
+        assert doc2.created_at == doc.created_at
+
     async def test_delete(self, client):
         ids = [
             str(x.id)
@@ -355,3 +350,11 @@ class TestBeanieView:
 
         data = response.json()
         assert data["total"] == 1  # no filtering done here
+
+    async def test_init_modelview_invalid_field(self):
+
+        class BadProductModelView(ModelView):
+            exclude_fields_from_detail = ["non-existing-field"]
+
+        with pytest.raises(ValueError):
+            BadProductModelView(Product)
