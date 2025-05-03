@@ -24,22 +24,22 @@ class FastAPIModelView(ModelView):
         )
 
         self.router.add_api_route(
-            "/edit", self.edit, methods=["PATCH"], response_model=self.document
+            "/{pk}", self.edit, methods=["PATCH"], response_model=self.document
         )
         self.router.add_api_route(
-            "/create", self.create, methods=["POST"], response_model=self.document
+            "/", self.create, methods=["POST"], response_model=self.document
         )
         self.router.add_api_route(
             "/delete", self.delete, methods=["DELETE"], response_model=Optional[int]
         )
         self.router.add_api_route(
-            "/get",
+            "/{pk}",
             self.find_by_pk,
             methods=["GET"],
             response_model=Optional[self.document],
         )
         self.router.add_api_route(
-            "/list", self.find_all, methods=["GET"], response_model=list[self.document]
+            "/", self.find_all, methods=["GET"], response_model=list[self.document]
         )
 
     async def find_all(
