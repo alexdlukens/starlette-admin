@@ -43,12 +43,6 @@ class BeanieModelConverter(StandardModelConverter):
             **self._standard_type_common(*args, **kwargs), label=kwargs.get("name")
         )
 
-    @converts(BackLink)
-    def conv_back_link(self, *args: Any, **kwargs: Any) -> BaseField:
-        return StringField(
-            **self._standard_type_common(*args, **kwargs), label=kwargs.get("name")
-        )
-
     @converts(SecretStr)
     def conv_secret_str(self, *args: Any, **kwargs: Any) -> BaseField:
         return PasswordField(
@@ -75,7 +69,7 @@ class BeanieModelConverter(StandardModelConverter):
             **self._standard_type_common(*args, **kwargs), label=kwargs.get("name")
         )
 
-    @converts(Link)
+    @converts(Link, BackLink)
     def conv_link(self, *args: Any, **kwargs: Any) -> BaseField:
         link_type = kwargs.get("type")
         # get the model type from the Link field
