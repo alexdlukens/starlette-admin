@@ -112,7 +112,9 @@ class TestBeanieView:
     @pytest_asyncio.fixture(loop_scope="function")
     async def client(self, app):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://testserver"
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+            follow_redirects=True,
         ) as c:
             yield c
 
@@ -277,11 +279,10 @@ class TestBeanieView:
                 "created_at": "2023-01-01T00:00:00Z",
             },
         )
-        assert response.status_code == 303
+        assert response.status_code == 200
         assert (await Product.count()) == 5
         # get the product again
         doc2 = await Product.find(Product.title == "IPhone 9").first_or_none()
-
         assert doc2.created_at == doc.created_at
 
     async def test_delete(self, client):
