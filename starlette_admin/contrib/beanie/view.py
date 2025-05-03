@@ -21,7 +21,6 @@ from beanie.odm.operators.find import BaseFindOperator
 from beanie.operators import Or, RegEx, Text
 from pydantic import ValidationError
 from starlette.requests import Request
-from starlette_admin._types import RequestAction
 from starlette_admin.contrib.beanie.converters import (
     BeanieModelConverter,
 )
@@ -233,11 +232,6 @@ class ModelView(BaseModelView, Generic[T]):
         return getattr(obj, not_none(self.pk_attr))
 
     async def create(self, request: Request, data: dict) -> T:
-        data = {
-            k: v
-            for k, v in data.items()
-            if k not in self.get_fields_list(request, action=RequestAction.CREATE)
-        }
         try:
             doc = self.document(**data)
         except ValidationError as ve:
@@ -247,11 +241,6 @@ class ModelView(BaseModelView, Generic[T]):
     async def edit(self, request: Request, pk: PydanticObjectId, data: dict) -> T:
         doc: Union[Document, None] = await self.document.get(pk)
         assert doc is not None, "Document not found"
-        data = {
-            k: v
-            for k, v in data.items()
-            if k not in self.get_fields_list(request, action=RequestAction.EDIT)
-        }
         try:
 
             for key in data:
