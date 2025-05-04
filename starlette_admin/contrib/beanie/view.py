@@ -16,7 +16,7 @@ from typing import (
 
 import bson.errors
 import starlette_admin.fields as sa
-from beanie import Document, Link, PydanticObjectId, BackLink
+from beanie import BackLink, Document, Link, PydanticObjectId
 from beanie.odm.operators.find import BaseFindOperator
 from beanie.operators import Or, RegEx, Text
 from pydantic import ValidationError
@@ -229,7 +229,7 @@ class ModelView(BaseModelView, Generic[T]):
         if isinstance(obj, Link):
             return getattr(obj.ref, not_none(self.pk_attr))
         if isinstance(obj, BackLink):
-            return None
+            return "see detail"
 
         return getattr(obj, not_none(self.pk_attr))
 
@@ -241,7 +241,9 @@ class ModelView(BaseModelView, Generic[T]):
         return await doc.create()
 
     async def edit(self, request: Request, pk: PydanticObjectId, data: dict) -> T:
-        doc: Union[Document, None] = await self.document.get(pk, fetch_links=True, nesting_depth=1)
+        doc: Union[Document, None] = await self.document.get(
+            pk, fetch_links=True, nesting_depth=1
+        )
         assert doc is not None, "Document not found"
         try:
 
