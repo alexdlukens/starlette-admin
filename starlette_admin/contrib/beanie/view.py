@@ -1,3 +1,4 @@
+import asyncio
 import functools
 from typing import (
     Any,
@@ -26,8 +27,11 @@ from starlette_admin.contrib.beanie.converters import (
 )
 from starlette_admin.contrib.beanie.helpers import (
     BeanieLogicalOperator,
+    OnlyIdProjection,
     build_order_clauses,
+    is_backlink_type,
     is_link_type,
+    is_list_of_backlinks_type,
     is_list_of_links_type,
     normalize_field_list,
     resolve_deep_query,
@@ -45,6 +49,7 @@ T = TypeVar("T", bound=Document)
 
 class ModelView(BaseModelView, Generic[T]):
     full_text_override_order_by: bool = False
+    handle_backlinks_in_list: bool = False
 
     def __init__(
         self,
@@ -70,7 +75,8 @@ class ModelView(BaseModelView, Generic[T]):
         self.fields_pydantic = list(document.model_fields.items())
 
         self.field_infos = []
-        self.link_fields = []
+        self.link_fields: list[dict] = []
+        self.backlink_fields: list[dict] = []
         self.exclude_fields_from_create = [
             *self.exclude_fields_from_create,
             "revision_id",
@@ -103,13 +109,34 @@ class ModelView(BaseModelView, Generic[T]):
             field_type = field.annotation
             while get_origin(field_type) is Union:
                 field_type = get_args(field_type)[0]
-            if is_link_type(field_type) or is_list_of_links_type(field_type):
-                self.link_fields.append(
+            if name == "id":
+                # treat this field separately. We don't want to use aliases here
+                self.field_infos.append(
                     {"name": name, "type": field_type, "required": field.is_required()}
+                )
+            elif is_link_type(field_type) or is_list_of_links_type(field_type):
+                self.link_fields.append(
+                    {
+                        "name": field.alias or name,
+                        "type": field_type,
+                        "required": field.is_required(),
+                    }
+                )
+            elif is_backlink_type(field_type) or is_list_of_backlinks_type(field_type):
+                self.backlink_fields.append(
+                    {
+                        "name": field.alias or name,
+                        "type": field_type,
+                        "required": field.is_required(),
+                    }
                 )
             else:
                 self.field_infos.append(
-                    {"name": name, "type": field_type, "required": field.is_required()}
+                    {
+                        "name": field.alias or name,
+                        "type": field_type,
+                        "required": field.is_required(),
+                    }
                 )
         self.fields = list(
             (converter or BeanieModelConverter()).convert_fields_list(
@@ -120,6 +147,10 @@ class ModelView(BaseModelView, Generic[T]):
         self.fields.extend(
             BeanieModelConverter().conv_link(**link_field)
             for link_field in self.link_fields
+        )
+        self.fields.extend(
+            BeanieModelConverter().conv_link(**backlink_field)
+            for backlink_field in self.backlink_fields
         )
 
         super().__init__()
@@ -197,14 +228,36 @@ class ModelView(BaseModelView, Generic[T]):
         if not where:
             where = {}
         query, is_full_text_query = await self._build_query(request, where)
-        result = self.document.find(query.query, **kwargs)
+        result = self.document.find(
+            query.query,
+            projection_model=(
+                OnlyIdProjection if self.handle_backlinks_in_list else None
+            ),
+            fetch_links=False,
+            **kwargs,
+        )
 
         # handle order_by
         if is_full_text_query and self.full_text_override_order_by:
             result = result.sort(("score", {"$meta": "textScore"}))  # type: ignore
         elif order_by:
             result = result.sort(build_order_clauses(order_by))
-        return await result.skip(skip).limit(limit).to_list()
+
+        result_docs = await result.skip(skip).limit(limit).to_list()
+        if not self.handle_backlinks_in_list:
+            return result_docs
+        return await asyncio.gather(
+            *[
+                self.document.get(
+                    doc.id,
+                    fetch_links=True,
+                    nesting_depths_per_field={
+                        f["name"]: 1 for f in self.backlink_fields
+                    },
+                )
+                for doc in result_docs
+            ]
+        )
 
     async def find_by_pk(self, request: Request, pk: PydanticObjectId) -> Optional[T]:
         if not isinstance(pk, PydanticObjectId):
