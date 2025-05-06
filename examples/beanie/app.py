@@ -12,7 +12,12 @@ async def setup_db():
     models = await create_db_and_tables()
 
     for model in models:
-        admin.add_view(ModelView(model, name=model.__name__, icon="database"))
+        if model.__name__ == "Store":
+            class StoreView(ModelView):
+                handle_backlinks_in_list = True
+            admin.add_view(StoreView(model, name=model.__name__, icon="store"))
+        else: 
+            admin.add_view(ModelView(model, name=model.__name__, icon="database"))
 
 
 app = Starlette(
