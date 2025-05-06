@@ -81,12 +81,14 @@ class BeanieModelConverter(StandardModelConverter):
             return HasMany(
                 **self._standard_type_common(*args, **kwargs),
                 label=kwargs.get("name"),
+                help_text=kwargs.get("help_text"),
                 identity=slugify_class_name(link_model_type.__name__),
             )
 
         return HasOne(
             **self._standard_type_common(*args, **kwargs),
             label=kwargs.get("name"),
+            help_text=kwargs.get("help_text"),
             identity=slugify_class_name(link_model_type.__name__),
         )
 

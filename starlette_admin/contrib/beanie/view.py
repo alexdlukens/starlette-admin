@@ -119,6 +119,7 @@ class ModelView(BaseModelView, Generic[T]):
                     {
                         "name": field.alias or name,
                         "type": field_type,
+                        "help_text": "link",
                         "required": field.is_required(),
                     }
                 )
@@ -127,6 +128,7 @@ class ModelView(BaseModelView, Generic[T]):
                     {
                         "name": field.alias or name,
                         "type": field_type,
+                        "help_text": "backlink, set relationship in the other model",
                         "required": field.is_required(),
                     }
                 )
@@ -282,7 +284,7 @@ class ModelView(BaseModelView, Generic[T]):
         if isinstance(obj, Link):
             return getattr(obj.ref, not_none(self.pk_attr))
         if isinstance(obj, BackLink):
-            return "see detail"
+            return "see detail" if not self.handle_backlinks_in_list else None
 
         return getattr(obj, not_none(self.pk_attr))
 
