@@ -75,6 +75,11 @@ class User(Document):
 class ProductView(ModelView):
     exclude_fields_from_create = ["created_at"]
     exclude_fields_from_edit = ["created_at"]
+    handle_backlinks_in_list = True
+
+
+Product.model_rebuild(force=True)
+Store.model_rebuild(force=True)
 
 
 class TestBeanieRelations:
