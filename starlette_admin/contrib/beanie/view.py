@@ -49,7 +49,8 @@ T = TypeVar("T", bound=Document)
 
 class ModelView(BaseModelView, Generic[T]):
     full_text_override_order_by: bool = False
-    handle_backlinks_in_list: bool = False
+    fetch_backlinks_in_list: bool = False
+    fetch_links_in_list: bool = False
 
     def __init__(
         self,
@@ -233,7 +234,9 @@ class ModelView(BaseModelView, Generic[T]):
         result = self.document.find(
             query.query,
             projection_model=(
-                OnlyIdProjection if self.handle_backlinks_in_list else None
+                OnlyIdProjection
+                if self.fetch_backlinks_in_list or self.fetch_links_in_list
+                else None
             ),
             fetch_links=False,
             **kwargs,
@@ -246,16 +249,27 @@ class ModelView(BaseModelView, Generic[T]):
             result = result.sort(build_order_clauses(order_by))
 
         result_docs = await result.skip(skip).limit(limit).to_list()
-        if not self.handle_backlinks_in_list:
+        if not self.fetch_backlinks_in_list and not self.fetch_links_in_list:
             return result_docs
+        if self.fetch_backlinks_in_list:
+            return await asyncio.gather(
+                *[
+                    self.document.get(
+                        doc.id,
+                        fetch_links=True,
+                        nesting_depths_per_field={
+                            f["name"]: 1 for f in self.backlink_fields
+                        },
+                    )
+                    for doc in result_docs
+                ]
+            )
         return await asyncio.gather(
             *[
                 self.document.get(
                     doc.id,
                     fetch_links=True,
-                    nesting_depths_per_field={
-                        f["name"]: 1 for f in self.backlink_fields
-                    },
+                    nesting_depth=1,
                 )
                 for doc in result_docs
             ]
