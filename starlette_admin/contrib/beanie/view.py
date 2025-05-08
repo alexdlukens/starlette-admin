@@ -298,7 +298,7 @@ class ModelView(BaseModelView, Generic[T]):
         if isinstance(obj, Link):
             return getattr(obj.ref, not_none(self.pk_attr))
         if isinstance(obj, BackLink):
-            return "see detail" if not self.handle_backlinks_in_list else None
+            return "see detail" if not self.fetch_backlinks_in_list else None
 
         return getattr(obj, not_none(self.pk_attr))
 
