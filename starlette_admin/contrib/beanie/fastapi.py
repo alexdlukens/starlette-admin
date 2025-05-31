@@ -56,6 +56,6 @@ class FastAPIModelView(ModelView):
         try:
             where_json = json.loads(where)
             return await super().find_all(request, skip, limit, where_json, order_by)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             pass
         return await super().find_all(request, skip, limit, where, order_by)
