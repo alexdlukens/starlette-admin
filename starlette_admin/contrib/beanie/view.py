@@ -275,21 +275,21 @@ class ModelView(BaseModelView, Generic[T]):
             ]
         )
 
-    async def find_by_pk(self, request: Request, pk: PydanticObjectId) -> Optional[T]:
+    async def find_by_pk(self, request: Request, pk: PydanticObjectId, fetch_links: bool = True) -> Optional[T]:
         if not isinstance(pk, PydanticObjectId):
             try:
                 pk = PydanticObjectId(pk)
             except bson.errors.InvalidId:
                 return None
 
-        return await self.document.get(pk, fetch_links=True, nesting_depth=1)
+        return await self.document.get(pk, fetch_links=fetch_links, nesting_depth=1)
 
     async def find_by_pks(
-        self, request: Request, pks: Iterable[PydanticObjectId]
+        self, request: Request, pks: Iterable[PydanticObjectId], fetch_links: bool = True
     ) -> List[T]:
         docs = []
         for pk in pks:
-            doc = await self.document.get(pk, fetch_links=True, nesting_depth=1)
+            doc = await self.document.get(pk, fetch_links=fetch_links, nesting_depth=1)
             if doc:
                 docs.append(doc)
         return docs

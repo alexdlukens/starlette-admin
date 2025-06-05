@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Query
 from starlette.requests import Request
+from beanie import PydanticObjectId
 from starlette_admin.contrib.beanie import ModelView
 from starlette_admin.contrib.beanie.converters import BeanieModelConverter
 
@@ -41,6 +42,9 @@ class FastAPIModelView(ModelView):
         self.router.add_api_route(
             "/", self.find_all, methods=["GET"], response_model=list[self.document]
         )
+
+    async def find_by_pk(self, request: Request, pk: PydanticObjectId, fetch_links: bool = Query(False)):
+        return await super().find_by_pk(request=request, pk=pk, fetch_links=fetch_links)
 
     async def find_all(
         self,
