@@ -65,7 +65,7 @@ def get_file_icon(mime_type: str) -> str:
         "application/zip": "fa-file-archive",
     }
     if mime_type:
-        for key in mapping:
+        for key, _ in mapping.items():
             if key in mime_type:
                 return mapping[key]
     return "fa-file"
@@ -131,6 +131,10 @@ def wrap_endpoint_with_kwargs(
 
     return wrapper
 
+def strip_host_filter(url) -> str:
+    from urllib.parse import urlsplit
+    parsed = urlsplit(url)
+    return parsed.path + ("?" + parsed.query if parsed.query else "")
 
 T = TypeVar("T")
 
