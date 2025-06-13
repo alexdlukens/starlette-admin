@@ -86,8 +86,6 @@ def normalize_field_list(
     converted_field_list = []
     for field in field_list:
         field_name = str(field) if isinstance(field, ExpressionField) else field
-        if not isvalid_field(document, field_name):
-            raise ValueError(f"Invalid field: {field_name}")
         converted_field_list.append(field_name)
     return converted_field_list
 

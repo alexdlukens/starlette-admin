@@ -10,21 +10,18 @@ from typing import (
     Type,
     TypeVar,
     Union,
-    get_args,
-    get_origin,
 )
 
 import bson.errors
 import starlette_admin.fields as sa
 from beanie import Document, Link, PydanticObjectId
+from beanie.odm.fields import ExpressionField
 from beanie.odm.operators.find import BaseFindOperator
 from beanie.operators import Or, RegEx, Text
 from pydantic import ValidationError
 from starlette.requests import Request
 from starlette_admin._types import RequestAction
-from starlette_admin.contrib.beanie.converters import (
-    BeanieModelConverter,
-)
+from starlette_admin.contrib.beanie.converters import BeanieModelConverter
 from starlette_admin.contrib.beanie.helpers import (
     BeanieLogicalOperator,
     build_order_clauses,
@@ -70,8 +67,6 @@ class ModelView(BaseModelView, Generic[T]):
 
         self.fields_pydantic = list(document.model_fields.items())
 
-        self.field_infos = []
-        self.link_fields = []
         self.exclude_fields_from_create = [
             *self.exclude_fields_from_create,
             "revision_id",
@@ -100,27 +95,18 @@ class ModelView(BaseModelView, Generic[T]):
             field_list=self.exclude_fields_from_detail, document=document
         )
 
-        for name, field in document.model_fields.items():
-            field_type = field.annotation
-            while get_origin(field_type) is Union:
-                field_type = get_args(field_type)[0]
-            if is_link_type(field_type) or is_list_of_links_type(field_type):
-                self.link_fields.append(
-                    {"name": name, "type": field_type, "required": field.is_required()}
-                )
-            else:
-                self.field_infos.append(
-                    {"name": name, "type": field_type, "required": field.is_required()}
-                )
+        if self.fields is None or len(self.fields) == 0:
+            self.fields = document.model_fields.keys()
+
+        self.fields = [
+            str(field) if isinstance(field, ExpressionField) else field  # type: ignore[misc]
+            for field in self.fields
+        ]
+
         self.fields = list(
             (converter or BeanieModelConverter()).convert_fields_list(
-                fields=self.field_infos, model=self.document
+                fields=self.fields, model=self.document
             )
-        )
-
-        self.fields.extend(
-            BeanieModelConverter().conv_link(**link_field)
-            for link_field in self.link_fields
         )
 
         super().__init__()
@@ -255,16 +241,19 @@ class ModelView(BaseModelView, Generic[T]):
         try:
 
             for key in data:
-                field_type = self.document.model_fields[key].annotation
-                if is_link_type(field_type):
-                    if not isinstance(data[key], PydanticObjectId):
-                        data[key] = (
-                            None if not data[key] else PydanticObjectId(data[key])
-                        )
-                elif is_list_of_links_type(field_type):
-                    data[key] = [PydanticObjectId(item) for item in data[key] if item]
+                if key in self.document.model_fields:
+                    field_type = self.document.model_fields[key].annotation
+                    if is_link_type(field_type):
+                        if not isinstance(data[key], PydanticObjectId):
+                            data[key] = (
+                                None if not data[key] else PydanticObjectId(data[key])
+                            )
+                    elif is_list_of_links_type(field_type):
+                        data[key] = [
+                            PydanticObjectId(item) for item in data[key] if item
+                        ]
 
-                setattr(doc, key, data[key])
+                    setattr(doc, key, data[key])
 
             # ensure doc still passes validation
             validated_doc: T = self.document.model_validate(doc.model_dump())
