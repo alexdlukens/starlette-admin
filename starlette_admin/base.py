@@ -514,8 +514,8 @@ class BaseAdmin:
                 self.route_name + ":edit", identity=model.identity, pk=pk
             )
         elif form.get("_add_another", None) is not None:
-            url = request.url_for(self.route_name + ":create", identity=model.identity).path
-        return RedirectResponse(url, status_code=HTTP_303_SEE_OTHER)
+            url = request.url_for(self.route_name + ":create", identity=model.identity)
+        return RedirectResponse(strip_host_filter(url), status_code=HTTP_303_SEE_OTHER)
 
     async def _render_error(
         self,
