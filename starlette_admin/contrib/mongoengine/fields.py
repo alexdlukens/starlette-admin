@@ -7,6 +7,7 @@ from starlette_admin._types import RequestAction
 from starlette_admin.helpers import strip_host_filter
 from starlette_admin.fields import FileField as BaseFileField
 from starlette_admin.fields import ImageField as BaseImageField
+from starlette_admin.helpers import strip_host_filter
 
 
 @dataclass

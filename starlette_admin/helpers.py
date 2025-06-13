@@ -12,8 +12,10 @@ from typing import (
     TypeVar,
     Union,
 )
+from urllib.parse import urlsplit
 
 from markupsafe import escape
+from starlette.datastructures import URL
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette_admin._types import RequestAction
@@ -135,6 +137,11 @@ def strip_host_filter(url) -> str:
     from urllib.parse import urlsplit
     parsed = urlsplit(str(url))
     return parsed.path + ("?" + parsed.query if parsed.query else "")
+
+def strip_host_filter(url: str | URL) -> str:
+    parsed = urlsplit(str(url))
+    return parsed.path + ("?" + parsed.query if parsed.query else "")
+
 
 T = TypeVar("T")
 
