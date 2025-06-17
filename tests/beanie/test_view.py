@@ -44,7 +44,7 @@ class AnotherSameProduct(Document):
     price: float = Field(ge=0)
     brand: Brand
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
-
+    dummy_tag: List[str] = Field(default_factory=list)
 
 class Store(Document):
     name: str = Field(min_length=3)
@@ -379,6 +379,31 @@ class TestBeanieView:
             ).count()
         ) == 0
 
+    async def test_edit_explicitly_defined_field(self, client):
+        doc = await AnotherSameProduct.find(AnotherSameProduct.title == "IPhone 9").first_or_none()
+        assert doc is not None
+        id = doc.id
+        response = await client.post(
+            f"/admin/another-same-product/edit/{id}",
+            data={
+                "title": "Infinix INBOOK",
+                "description": (
+                    "Infinix Inbook X1 Ci3 10th 8GB 256GB 14 Win10 Grey - 1 Year"
+                    " Warranty"
+                ),
+                "price": 1049,
+                "brand": "Infinix",
+                "dummy_tag": ["test-tag-1"],
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert (await AnotherSameProduct.count()) == 5
+
+        await doc.sync()
+        assert doc.dummy_tag == ["test-tag-1"]
+
+
     async def test_full_text_index(self, client):
 
         # add store
@@ -427,9 +452,6 @@ class TestBeanieView:
         data = response.json()
         assert data["total"] == 1  # no filtering done here
 
-    @pytest.mark.skip(
-        "Validation for invalid fields in ModelView is no longer enforced"
-    )
     async def test_init_modelview_invalid_field(self):
 
         class BadProductModelView(ModelView):
