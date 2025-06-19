@@ -1,17 +1,18 @@
 import json
-from typing import List, Optional
+from typing import Generic, List, Optional, Type, TypeVar
 
+from beanie import Document, PydanticObjectId
 from fastapi import APIRouter, Query
 from starlette.requests import Request
-from beanie import PydanticObjectId
 from starlette_admin.contrib.beanie import ModelView
 from starlette_admin.contrib.beanie.converters import BeanieModelConverter
 
+T = TypeVar("T", bound=Document)
 
-class FastAPIModelView(ModelView):
+class FastAPIModelView(ModelView, Generic[T]):
     def __init__(
         self,
-        document: type,
+        document: Type[T],
         icon: str | None = None,
         name: str | None = None,
         label: str | None = None,
@@ -25,10 +26,10 @@ class FastAPIModelView(ModelView):
         )
 
         self.router.add_api_route(
-            "/{pk}", self.edit, methods=["PATCH"], response_model=self.document
+            "/{pk}", self.edit, methods=["PATCH"], response_model=T
         )
         self.router.add_api_route(
-            "/", self.create, methods=["POST"], response_model=self.document
+            "/", self.create, methods=["POST"], response_model=T
         )
         self.router.add_api_route(
             "/delete", self.delete, methods=["DELETE"], response_model=Optional[int]
@@ -37,16 +38,16 @@ class FastAPIModelView(ModelView):
             "/{pk}",
             self.find_by_pk,
             methods=["GET"],
-            response_model=Optional[self.document],
+            response_model=Optional[T],
         )
         self.router.add_api_route(
-            "/", self.find_all, methods=["GET"], response_model=list[self.document]
+            "/", self.find_all_route, methods=["GET"], response_model=list[T]
         )
 
     async def find_by_pk(self, request: Request, pk: PydanticObjectId, fetch_links: bool = Query(False)):
         return await super().find_by_pk(request=request, pk=pk, fetch_links=fetch_links)
 
-    async def find_all(
+    async def find_all_route(
         self,
         request: Request,
         skip: int = Query(default=0),
