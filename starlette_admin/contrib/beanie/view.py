@@ -11,8 +11,6 @@ from typing import (
     Type,
     TypeVar,
     Union,
-    get_args,
-    get_origin,
 )
 
 import bson.errors
@@ -22,9 +20,8 @@ from beanie.odm.operators.find import BaseFindOperator
 from beanie.operators import Or, RegEx, Text
 from pydantic import ValidationError
 from starlette.requests import Request
-from starlette_admin.contrib.beanie.converters import (
-    BeanieModelConverter,
-)
+from starlette_admin._types import RequestAction
+from starlette_admin.contrib.beanie.converters import BeanieModelConverter
 from starlette_admin.contrib.beanie.helpers import (
     BeanieLogicalOperator,
     OnlyIdProjection,
@@ -36,6 +33,7 @@ from starlette_admin.contrib.beanie.helpers import (
     normalize_field_list,
     resolve_deep_query,
 )
+from starlette_admin.fields import BaseField
 from starlette_admin.helpers import (
     not_none,
     prettify_class_name,
@@ -94,66 +92,25 @@ class ModelView(BaseModelView, Generic[T]):
         ]
 
         self.exclude_fields_from_create = normalize_field_list(
-            field_list=self.exclude_fields_from_create, document=document
+            field_list=self.exclude_fields_from_create
         )
         self.exclude_fields_from_edit = normalize_field_list(
-            field_list=self.exclude_fields_from_edit, document=document
+            field_list=self.exclude_fields_from_edit
         )
         self.exclude_fields_from_list = normalize_field_list(
-            field_list=self.exclude_fields_from_list, document=document
+            field_list=self.exclude_fields_from_list
         )
         self.exclude_fields_from_detail = normalize_field_list(
-            field_list=self.exclude_fields_from_detail, document=document
+            field_list=self.exclude_fields_from_detail
         )
 
-        for name, field in document.model_fields.items():
-            field_type = field.annotation
-            while get_origin(field_type) is Union:
-                field_type = get_args(field_type)[0]
-            if name == "id":
-                # treat this field separately. We don't want to use aliases here
-                self.field_infos.append(
-                    {"name": name, "type": field_type, "required": field.is_required()}
-                )
-            elif is_link_type(field_type) or is_list_of_links_type(field_type):
-                self.link_fields.append(
-                    {
-                        "name": field.alias or name,
-                        "type": field_type,
-                        "help_text": "link",
-                        "required": field.is_required(),
-                    }
-                )
-            elif is_backlink_type(field_type) or is_list_of_backlinks_type(field_type):
-                self.backlink_fields.append(
-                    {
-                        "name": field.alias or name,
-                        "type": field_type,
-                        "help_text": "backlink, set relationship in the other model",
-                        "required": field.is_required(),
-                    }
-                )
-            else:
-                self.field_infos.append(
-                    {
-                        "name": field.alias or name,
-                        "type": field_type,
-                        "required": field.is_required(),
-                    }
-                )
+        if self.fields is None or len(self.fields) == 0:
+            self.fields = document.model_fields.keys()
+
         self.fields = list(
             (converter or BeanieModelConverter()).convert_fields_list(
-                fields=self.field_infos, model=self.document
+                fields=self.fields, model=self.document
             )
-        )
-
-        self.fields.extend(
-            BeanieModelConverter().conv_link(**link_field)
-            for link_field in self.link_fields
-        )
-        self.fields.extend(
-            BeanieModelConverter().conv_link(**backlink_field)
-            for backlink_field in self.backlink_fields
         )
 
         super().__init__()
@@ -275,7 +232,9 @@ class ModelView(BaseModelView, Generic[T]):
             ]
         )
 
-    async def find_by_pk(self, request: Request, pk: PydanticObjectId, fetch_links: bool = True) -> Optional[T]:
+    async def find_by_pk(
+        self, request: Request, pk: PydanticObjectId, fetch_links: bool = True
+    ) -> Optional[T]:
         if not isinstance(pk, PydanticObjectId):
             try:
                 pk = PydanticObjectId(pk)
@@ -285,7 +244,10 @@ class ModelView(BaseModelView, Generic[T]):
         return await self.document.get(pk, fetch_links=fetch_links, nesting_depth=1)
 
     async def find_by_pks(
-        self, request: Request, pks: Iterable[PydanticObjectId], fetch_links: bool = True
+        self,
+        request: Request,
+        pks: Iterable[PydanticObjectId],
+        fetch_links: bool = True,
     ) -> List[T]:
         docs = []
         for pk in pks:
@@ -301,6 +263,9 @@ class ModelView(BaseModelView, Generic[T]):
             return "see detail" if not self.fetch_backlinks_in_list else None
 
         return getattr(obj, not_none(self.pk_attr))
+
+    async def get_serialized_pk_value(self, request: Request, obj: Any) -> Any:
+        return str(await self.get_pk_value(request, obj))
 
     async def create(self, request: Request, data: dict) -> T:
         try:
@@ -318,18 +283,20 @@ class ModelView(BaseModelView, Generic[T]):
         )
         assert doc is not None, "Document not found"
         try:
-
             for key in data:
-                field_type = self.document.model_fields[key].annotation
-                if is_link_type(field_type):
-                    if not isinstance(data[key], PydanticObjectId):
-                        data[key] = (
-                            None if not data[key] else PydanticObjectId(data[key])
-                        )
-                elif is_list_of_links_type(field_type):
-                    data[key] = [PydanticObjectId(item) for item in data[key] if item]
+                if key in self.document.model_fields:
+                    field_type = self.document.model_fields[key].annotation
+                    if is_link_type(field_type):
+                        if not isinstance(data[key], PydanticObjectId):
+                            data[key] = (
+                                None if not data[key] else PydanticObjectId(data[key])
+                            )
+                    elif is_list_of_links_type(field_type):
+                        data[key] = [
+                            PydanticObjectId(item) for item in data[key] if item
+                        ]
 
-                setattr(doc, key, data[key])
+                    setattr(doc, key, data[key])
 
             await self.before_edit(request, data=data, obj=doc)
             # ensure doc still passes validation
