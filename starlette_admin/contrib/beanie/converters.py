@@ -16,7 +16,9 @@ from pydantic import (  # type: ignore[attr-defined]
     SecretStr,
 )
 from starlette_admin.contrib.beanie.helpers import (
+    is_backlink_type,
     is_link_type,
+    is_list_of_backlinks_type,
     is_list_of_links_type,
     isvalid_field,
     resolve_expression_field_name,
@@ -37,7 +39,6 @@ from starlette_admin.helpers import slugify_class_name
 
 
 class BeanieModelConverter(StandardModelConverter):
-
     @converts(PydanticObjectId)
     def conv_pydantic_object_id(self, *args: Any, **kwargs: Any) -> BaseField:
         return StringField(
@@ -141,7 +142,12 @@ class BeanieModelConverter(StandardModelConverter):
                 if not isvalid_field(model, field):
                     raise ValueError(f"Invalid field: {field}")
                 field_type = self.get_type_beanie(model.model_fields, value)
-                if is_link_type(field_type) or is_list_of_links_type(field_type):
+                if (
+                    is_link_type(field_type)
+                    or is_list_of_links_type(field_type)
+                    or is_backlink_type(field_type)
+                    or is_list_of_backlinks_type(field_type)
+                ):
                     converted_fields.append(
                         self.conv_link(
                             name=field,
