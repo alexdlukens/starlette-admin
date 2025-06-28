@@ -12,12 +12,17 @@ from typing import (
     get_origin,
 )
 
-from beanie import Document, Link
+from beanie import BackLink, Document, Link, PydanticObjectId
 from beanie.odm.enums import SortDirection
 from beanie.odm.fields import ExpressionField
 from beanie.odm.operators.find import BaseFindOperator
 from beanie.odm.operators.find.logical import LogicalOperatorForListOfExpressions
 from beanie.operators import GT, GTE, LT, LTE, NE, And, Eq, In, Not, NotIn, Or, RegEx
+from pydantic import BaseModel, Field
+
+
+class OnlyIdProjection(BaseModel):
+    id: PydanticObjectId = Field(alias="_id")
 
 
 class BeanieLogicalOperator(LogicalOperatorForListOfExpressions):
@@ -139,6 +144,51 @@ def is_list_of_links_type(field_type: Type) -> bool:
         field_args = get_args(field_type)
         if any(
             get_origin(arg) is list and get_origin(get_args(arg)[0]) is Link
+            for arg in field_args
+        ):
+            return True
+    return False
+
+
+def is_backlink_type(field_type: Type) -> bool:
+    """Check if the field type is a BackLink or a list of BackLinks.
+    This is used to determine if the field is a relation field.
+    If the field type is Optional[BackLink], return true
+
+    Args:
+        field_type (Type): The field type to check.
+
+    Returns:
+        bool: True if the field type is a BackLink or a list of BackLinks, False otherwise.
+    """
+    if get_origin(field_type) is BackLink:
+        return True
+    if get_origin(field_type) is Union:
+        field_args = get_args(field_type)
+        if any(get_origin(arg) is BackLink for arg in field_args):
+            return True
+    return False
+
+
+def is_list_of_backlinks_type(field_type: Type) -> bool:
+    """Check if the field type is a list of BackLinks.
+
+    Args:
+        field_type (Type): The field type to check.
+
+    Returns:
+        bool: True if the field type is a list of BackLinks, False otherwise.
+    """
+    if get_origin(field_type) is list:
+        field_args = get_args(field_type)
+        if len(field_args) == 1 and get_origin(field_args[0]) is BackLink:
+            return True
+
+    # if is Optional[List[BackLink]], return true
+    if get_origin(field_type) is Union:
+        field_args = get_args(field_type)
+        if any(
+            get_origin(arg) is list and get_origin(get_args(arg)[0]) is BackLink
             for arg in field_args
         ):
             return True

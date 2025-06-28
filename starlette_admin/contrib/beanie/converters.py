@@ -16,7 +16,9 @@ from pydantic import (  # type: ignore[attr-defined]
     SecretStr,
 )
 from starlette_admin.contrib.beanie.helpers import (
+    is_backlink_type,
     is_link_type,
+    is_list_of_backlinks_type,
     is_list_of_links_type,
     isvalid_field,
     resolve_expression_field_name,
@@ -37,7 +39,6 @@ from starlette_admin.helpers import slugify_class_name
 
 
 class BeanieModelConverter(StandardModelConverter):
-
     @converts(PydanticObjectId)
     def conv_pydantic_object_id(self, *args: Any, **kwargs: Any) -> BaseField:
         return StringField(
@@ -46,12 +47,6 @@ class BeanieModelConverter(StandardModelConverter):
 
     @converts(uuid.UUID)
     def conv_uuid(self, *args: Any, **kwargs: Any) -> BaseField:
-        return StringField(
-            **self._standard_type_common(*args, **kwargs), label=kwargs.get("name")
-        )
-
-    @converts(BackLink)
-    def conv_back_link(self, *args: Any, **kwargs: Any) -> BaseField:
         return StringField(
             **self._standard_type_common(*args, **kwargs), label=kwargs.get("name")
         )
@@ -82,7 +77,7 @@ class BeanieModelConverter(StandardModelConverter):
             **self._standard_type_common(*args, **kwargs), label=kwargs.get("name")
         )
 
-    @converts(Link)
+    @converts(Link, BackLink)
     def conv_link(self, *args: Any, **kwargs: Any) -> BaseField:
         link_type = kwargs.get("type")
         # get the model type from the Link field
@@ -94,12 +89,14 @@ class BeanieModelConverter(StandardModelConverter):
             return HasMany(
                 **self._standard_type_common(*args, **kwargs),
                 label=kwargs.get("name"),
+                help_text=kwargs.get("help_text"),
                 identity=slugify_class_name(link_model_type.__name__),
             )
 
         return HasOne(
             **self._standard_type_common(*args, **kwargs),
             label=kwargs.get("name"),
+            help_text=kwargs.get("help_text"),
             identity=slugify_class_name(link_model_type.__name__),
         )
 
@@ -145,7 +142,12 @@ class BeanieModelConverter(StandardModelConverter):
                 if not isvalid_field(model, field):
                     raise ValueError(f"Invalid field: {field}")
                 field_type = self.get_type_beanie(model.model_fields, value)
-                if is_link_type(field_type) or is_list_of_links_type(field_type):
+                if (
+                    is_link_type(field_type)
+                    or is_list_of_links_type(field_type)
+                    or is_backlink_type(field_type)
+                    or is_list_of_backlinks_type(field_type)
+                ):
                     converted_fields.append(
                         self.conv_link(
                             name=field,

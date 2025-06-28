@@ -1,3 +1,4 @@
+import asyncio
 import functools
 from typing import (
     Any,
@@ -14,17 +15,24 @@ from typing import (
 
 import bson.errors
 import starlette_admin.fields as sa
-from beanie import Document, Link, PydanticObjectId
+from beanie import BackLink, Document, Link, PydanticObjectId
 from beanie.odm.operators.find import BaseFindOperator
 from beanie.operators import Or, RegEx, Text
 from pydantic import ValidationError
 from starlette.requests import Request
 from starlette_admin._types import RequestAction
-from starlette_admin.contrib.beanie.converters import BeanieModelConverter
+from starlette_admin.contrib.beanie.converters import (
+    BeanieModelConverter,
+)
 from starlette_admin.contrib.beanie.helpers import (
     BeanieLogicalOperator,
+    OnlyIdProjection,
     build_order_clauses,
+    get_args,
+    get_origin,
+    is_backlink_type,
     is_link_type,
+    is_list_of_backlinks_type,
     is_list_of_links_type,
     normalize_field_list,
     resolve_deep_query,
@@ -42,6 +50,8 @@ T = TypeVar("T", bound=Document)
 
 class ModelView(BaseModelView, Generic[T]):
     full_text_override_order_by: bool = False
+    fetch_backlinks_in_list: bool = False
+    fetch_links_in_list: bool = False
 
     def __init__(
         self,
@@ -66,6 +76,8 @@ class ModelView(BaseModelView, Generic[T]):
 
         self.fields_pydantic = list(document.model_fields.items())
 
+        self.link_fields: list[dict] = []
+        self.backlink_fields: list[dict] = []
         self.exclude_fields_from_create = [
             *self.exclude_fields_from_create,
             "revision_id",
@@ -97,6 +109,30 @@ class ModelView(BaseModelView, Generic[T]):
         if self.fields is None or len(self.fields) == 0:
             self.fields = document.model_fields.keys()
 
+        for name, field in document.model_fields.items():
+            field_type = field.annotation
+            while get_origin(field_type) is Union:
+                field_type = get_args(field_type)[0]
+            if name == "id":
+                continue
+            if is_link_type(field_type) or is_list_of_links_type(field_type):
+                self.link_fields.append(
+                    {
+                        "name": field.alias or name,
+                        "type": field_type,
+                        "help_text": "link",
+                        "required": field.is_required(),
+                    }
+                )
+            elif is_backlink_type(field_type) or is_list_of_backlinks_type(field_type):
+                self.backlink_fields.append(
+                    {
+                        "name": field.alias or name,
+                        "type": field_type,
+                        "help_text": "backlink, set relationship in the other model",
+                        "required": field.is_required(),
+                    }
+                )
         self.fields = list(
             (converter or BeanieModelConverter()).convert_fields_list(
                 fields=self.fields, model=self.document
@@ -178,30 +214,70 @@ class ModelView(BaseModelView, Generic[T]):
         if not where:
             where = {}
         query, is_full_text_query = await self._build_query(request, where)
-        result = self.document.find(query.query, **kwargs)
+        result = self.document.find(
+            query.query,
+            projection_model=(
+                OnlyIdProjection
+                if self.fetch_backlinks_in_list or self.fetch_links_in_list
+                else None
+            ),
+            fetch_links=False,
+            **kwargs,
+        )
 
         # handle order_by
         if is_full_text_query and self.full_text_override_order_by:
             result = result.sort(("score", {"$meta": "textScore"}))  # type: ignore
         elif order_by:
             result = result.sort(build_order_clauses(order_by))
-        return await result.skip(skip).limit(limit).to_list()
 
-    async def find_by_pk(self, request: Request, pk: PydanticObjectId) -> Optional[T]:
+        result_docs = await result.skip(skip).limit(limit).to_list()
+        if not self.fetch_backlinks_in_list and not self.fetch_links_in_list:
+            return result_docs
+        if self.fetch_backlinks_in_list:
+            return await asyncio.gather(
+                *[
+                    self.document.get(
+                        doc.id,
+                        fetch_links=True,
+                        nesting_depths_per_field={
+                            f["name"]: 1 for f in self.backlink_fields
+                        },
+                    )
+                    for doc in result_docs
+                ]
+            )
+        return await asyncio.gather(
+            *[
+                self.document.get(
+                    doc.id,
+                    fetch_links=True,
+                    nesting_depth=1,
+                )
+                for doc in result_docs
+            ]
+        )
+
+    async def find_by_pk(
+        self, request: Request, pk: PydanticObjectId, fetch_links: bool = True
+    ) -> Optional[T]:
         if not isinstance(pk, PydanticObjectId):
             try:
                 pk = PydanticObjectId(pk)
             except bson.errors.InvalidId:
                 return None
 
-        return await self.document.get(pk, fetch_links=True, nesting_depth=1)
+        return await self.document.get(pk, fetch_links=fetch_links, nesting_depth=1)
 
     async def find_by_pks(
-        self, request: Request, pks: Iterable[PydanticObjectId]
+        self,
+        request: Request,
+        pks: Iterable[PydanticObjectId],
+        fetch_links: bool = True,
     ) -> List[T]:
         docs = []
         for pk in pks:
-            doc = await self.document.get(pk)
+            doc = await self.document.get(pk, fetch_links=fetch_links, nesting_depth=1)
             if doc:
                 docs.append(doc)
         return docs
@@ -209,6 +285,8 @@ class ModelView(BaseModelView, Generic[T]):
     async def get_pk_value(self, request: Request, obj: Any) -> Any:
         if isinstance(obj, Link):
             return getattr(obj.ref, not_none(self.pk_attr))
+        if isinstance(obj, BackLink):
+            return "see detail" if not self.fetch_backlinks_in_list else None
 
         return getattr(obj, not_none(self.pk_attr))
 
@@ -228,16 +306,12 @@ class ModelView(BaseModelView, Generic[T]):
             return self.handle_exception(e)
 
     async def edit(self, request: Request, pk: PydanticObjectId, data: dict) -> Any:
-        doc: Union[Document, None] = await self.document.get(pk)
+        doc: Union[Document, None] = await self.document.get(
+            pk, fetch_links=True, nesting_depth=1
+        )
         assert doc is not None, "Document not found"
-        data = {
-            k: v
-            for k, v in data.items()
-            if k not in self.get_fields_list(request, action=RequestAction.EDIT)
-        }
         try:
-
-            for key in data:
+            for key in data:  # noqa: PLC0206
                 if key in self.document.model_fields:
                     field_type = self.document.model_fields[key].annotation
                     if is_link_type(field_type):
