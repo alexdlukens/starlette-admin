@@ -64,3 +64,4 @@ class FastAPIModelView(ModelView, Generic[T]):
             return await super().find_all(request, skip, limit, where_json, order_by)
         except (json.JSONDecodeError, TypeError):
             pass
+        return await super().find_all(request, skip, limit, where, order_by)
