@@ -142,7 +142,10 @@ class ModelView(BaseModelView, Generic[T]):
         super().__init__()
 
     async def check_full_text_index(self) -> None:
-        indexes = await self.document.get_motor_collection().index_information()
+        try:
+            indexes = await self.document.get_motor_collection().index_information()
+        except AttributeError:
+            indexes = await self.document.get_pymongo_collection().index_information()
         for index in indexes.values():
             if any(field_type == "text" for _, field_type in index["key"]):
                 self.has_full_text_index = True
@@ -198,7 +201,10 @@ class ModelView(BaseModelView, Generic[T]):
     ) -> int:
         query, _ = await self._build_query(request, where)
         if not bool(query):
-            return await self.document.get_motor_collection().estimated_document_count()
+            try:
+                return await self.document.get_motor_collection().estimated_document_count()
+            except AttributeError:
+                return await self.document.get_pymongo_collection().estimated_document_count()
         result = self.document.find(query.query)
         return await result.count()
 
