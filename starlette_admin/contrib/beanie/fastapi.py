@@ -27,9 +27,11 @@ class FastAPIModelView(ModelView, Generic[T]):
         )
 
         self.router.add_api_route(
-            "/{pk}", self.edit, methods=["PATCH"], response_model=T
+            "/{pk}", self.edit, methods=["PATCH"], response_model=document
         )
-        self.router.add_api_route("/", self.create, methods=["POST"], response_model=T)
+        self.router.add_api_route(
+            "/", self.create, methods=["POST"], response_model=document
+        )
         self.router.add_api_route(
             "/delete", self.delete, methods=["DELETE"], response_model=Optional[int]
         )
@@ -37,10 +39,10 @@ class FastAPIModelView(ModelView, Generic[T]):
             "/{pk}",
             self.find_by_pk,
             methods=["GET"],
-            response_model=Optional[T],
+            response_model=Optional[document],
         )
         self.router.add_api_route(
-            "/", self.find_all_route, methods=["GET"], response_model=list[T]
+            "/", self.find_all_route, methods=["GET"], response_model=list[document]
         )
 
     async def find_by_pk(
