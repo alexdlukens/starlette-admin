@@ -18,6 +18,7 @@ from beanie.odm.fields import ExpressionField
 from beanie.odm.operators.find import BaseFindOperator
 from beanie.odm.operators.find.logical import LogicalOperatorForListOfExpressions
 from beanie.operators import GT, GTE, LT, LTE, NE, And, Eq, In, Not, NotIn, Or, RegEx
+from bson import ObjectId
 from pydantic import BaseModel, Field
 
 
@@ -26,7 +27,6 @@ class OnlyIdProjection(BaseModel):
 
 
 class BeanieLogicalOperator(LogicalOperatorForListOfExpressions):
-
     @property
     def query(self) -> Dict[str, Any]:
         if not self.expressions:
@@ -64,14 +64,29 @@ def isvalid_field(document: Type[Document], field: str) -> bool:
     """
     Check if field is valid field for document. nested field is separate with '.'
     """
+
+    # if is typing.Optional or typing.Union, check the inner type
+    if get_origin(document) is Union or get_origin(document) is Optional:
+        field_args = get_args(document)
+        return any(isvalid_field(arg, field) for arg in field_args)
+
+    if get_origin(document) is Link or get_origin(document) is BackLink:
+        return isvalid_field(get_args(document)[0], field)
+
     try:
         split_fields = field.split(".", maxsplit=1)
         if len(split_fields) == 1:
             top_field, nested_field = split_fields[0], None
         else:
             top_field, nested_field = split_fields
-
         subdoc = document.model_fields.get(top_field)
+        if (
+            top_field == "$id"
+            and nested_field is None
+            and issubclass(document, Document)
+        ):
+            # Special case for $id field, which is a PydanticObjectId
+            return True
         if not subdoc:
             return False
         if nested_field is None:
@@ -80,7 +95,8 @@ def isvalid_field(document: Type[Document], field: str) -> bool:
         nested_type = subdoc.annotation
         return isvalid_field(nested_type, nested_field)
 
-    except Exception:  # pragma: no cover
+    except Exception as e:  # pragma: no cover
+        print(f"Error checking field '{field}' in document '{document}': {e}")
         return False
 
 
@@ -211,7 +227,10 @@ def resolve_deep_query(
                 }
                 _all_queries.append(functools.reduce(funcs[key], _arr))
         elif key in OPERATORS:
-            _all_queries.append(OPERATORS[key](latest_field, where[key]))  # type: ignore
+            if latest_field.endswith("$id"):
+                _all_queries.append(OPERATORS[key](latest_field, ObjectId(where[key])))  # type: ignore
+            else:
+                _all_queries.append(OPERATORS[key](latest_field, where[key]))  # type: ignore
         elif isvalid_field(document, key):
             _all_queries.append(resolve_deep_query(where[key], document, key))
     if _all_queries:
