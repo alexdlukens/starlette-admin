@@ -33,7 +33,7 @@ class FastAPIModelView(ModelView, Generic[T]):
             "/", self.create, methods=["POST"], response_model=document
         )
         self.router.add_api_route(
-            "/delete", self.delete, methods=["DELETE"], response_model=Optional[int]
+            "/{pk}", self.delete_route, methods=["DELETE"], response_model=Optional[int]
         )
         self.router.add_api_route(
             "/{pk}",
@@ -49,6 +49,11 @@ class FastAPIModelView(ModelView, Generic[T]):
         self, request: Request, pk: PydanticObjectId, fetch_links: bool = Query(False)
     ):
         return await super().find_by_pk(request=request, pk=pk, fetch_links=fetch_links)
+
+    async def delete_route(
+        self, request: Request, pk: PydanticObjectId
+    ) -> Optional[int]:
+        return await super().delete(request=request, pks=[pk])
 
     async def find_all_route(
         self,
