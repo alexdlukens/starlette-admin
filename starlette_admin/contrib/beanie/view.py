@@ -202,9 +202,13 @@ class ModelView(BaseModelView, Generic[T]):
         query, _ = await self._build_query(request, where)
         if not bool(query):
             try:
-                return await self.document.get_motor_collection().estimated_document_count()
+                return (
+                    await self.document.get_motor_collection().estimated_document_count()
+                )
             except AttributeError:
-                return await self.document.get_pymongo_collection().estimated_document_count()
+                return (
+                    await self.document.get_pymongo_collection().estimated_document_count()
+                )
         result = self.document.find(query.query)
         return await result.count()
 

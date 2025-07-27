@@ -95,8 +95,7 @@ def isvalid_field(document: Type[Document], field: str) -> bool:
         nested_type = subdoc.annotation
         return isvalid_field(nested_type, nested_field)
 
-    except Exception as e:  # pragma: no cover
-        print(f"Error checking field '{field}' in document '{document}': {e}")
+    except Exception:  # pragma: no cover
         return False
 
 
