@@ -27,6 +27,9 @@ class FastAPIModelView(ModelView, Generic[T]):
         )
 
         self.router.add_api_route(
+            "/one", self.find_one, methods=["GET"], response_model=Optional[document]
+        )
+        self.router.add_api_route(
             "/{pk}", self.edit, methods=["PATCH"], response_model=document
         )
         self.router.add_api_route(
@@ -44,6 +47,20 @@ class FastAPIModelView(ModelView, Generic[T]):
         self.router.add_api_route(
             "/", self.find_all_route, methods=["GET"], response_model=list[document]
         )
+
+    async def find_one(self, request: Request, where: str = Query("")) -> Optional[T]:
+        find_many_result = await self.find_all_route(
+            request=request,
+            where=where,
+            skip=0,
+            limit=2,
+            order_by=["id asc"],
+        )
+        if find_many_result and len(find_many_result) > 1:
+            raise ValueError("More than one result found, use find_all instead.")
+        if not find_many_result:
+            return None
+        return find_many_result[0]
 
     async def find_by_pk(
         self, request: Request, pk: PydanticObjectId, fetch_links: bool = Query(False)
