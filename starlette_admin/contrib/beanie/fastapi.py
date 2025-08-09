@@ -4,6 +4,7 @@ from typing import Generic, List, Optional, Type, TypeVar
 from beanie import Document, PydanticObjectId
 from fastapi import APIRouter, Query
 from starlette.requests import Request
+from starlette.exceptions import HTTPException
 from starlette_admin.contrib.beanie import ModelView
 from starlette_admin.contrib.beanie.converters import BeanieModelConverter
 
@@ -59,7 +60,10 @@ class FastAPIModelView(ModelView, Generic[T]):
         if find_many_result and len(find_many_result) > 1:
             raise ValueError("More than one result found, use find_all instead.")
         if not find_many_result:
-            return None
+            raise HTTPException(
+                status_code=404,
+                detail="No results found for the given query.",
+            )
         return find_many_result[0]
 
     async def find_by_pk(
