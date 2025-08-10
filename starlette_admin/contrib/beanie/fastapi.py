@@ -3,8 +3,8 @@ from typing import Generic, List, Optional, Type, TypeVar
 
 from beanie import Document, PydanticObjectId
 from fastapi import APIRouter, Query
-from starlette.requests import Request
 from starlette.exceptions import HTTPException
+from starlette.requests import Request
 from starlette_admin.contrib.beanie import ModelView
 from starlette_admin.contrib.beanie.converters import BeanieModelConverter
 

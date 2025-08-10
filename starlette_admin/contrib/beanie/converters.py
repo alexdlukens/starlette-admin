@@ -15,6 +15,8 @@ from pydantic import (  # type: ignore[attr-defined]
     PastDatetime,
     SecretStr,
 )
+from starlette.requests import Request
+from starlette_admin._types import RequestAction
 from starlette_admin.contrib.beanie.helpers import (
     is_backlink_type,
     is_link_type,
@@ -38,6 +40,27 @@ from starlette_admin.fields import (
 from starlette_admin.helpers import slugify_class_name
 
 
+class PydanticSecretStrField(PasswordField):
+    async def serialize_value(
+        self, request: Request, value: SecretStr, action: RequestAction
+    ) -> Any:
+        """Formats a value for sending to the frontend based on the current request action.
+
+        !!! important
+
+            Make sure this value is JSON Serializable for RequestAction.LIST and RequestAction.API
+
+        Args:
+            request: The current request object.
+            value: The value to format.
+            action: The current request action.
+
+        Returns:
+            Any: The formatted value.
+        """
+        return value.get_secret_value() if value else None
+
+
 class BeanieModelConverter(StandardModelConverter):
     @converts(PydanticObjectId)
     def conv_pydantic_object_id(self, *args: Any, **kwargs: Any) -> BaseField:
@@ -53,7 +76,7 @@ class BeanieModelConverter(StandardModelConverter):
 
     @converts(SecretStr)
     def conv_secret_str(self, *args: Any, **kwargs: Any) -> BaseField:
-        return PasswordField(
+        return PydanticSecretStrField(
             **self._standard_type_common(*args, **kwargs), label=kwargs.get("name")
         )
 
