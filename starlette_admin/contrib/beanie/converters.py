@@ -37,6 +37,7 @@ from starlette_admin.fields import (
     StringField,
     URLField,
 )
+from bson import DBRef
 from starlette_admin.helpers import slugify_class_name
 
 
@@ -148,6 +149,20 @@ class BeanieModelConverter(StandardModelConverter):
             field_type = get_args(field_type)[0]
 
         return field_type
+
+    @converts(DBRef)
+    def conv_dbref(self, *args: Any, **kwargs: Any) -> BaseField:
+        """
+        Converts a DBRef to a DictionaryField with the collection name and id.
+        """
+        return CollectionField(
+            **self._standard_type_common(*args, **kwargs),
+            fields=[
+                StringField(name="collection", required=True),
+                StringField(name="id", required=True),
+            ],
+        )
+
 
     def convert_fields_list(
         self, *, fields: Sequence[Any], model: Type[Any], **kwargs: Dict[str, Any]
