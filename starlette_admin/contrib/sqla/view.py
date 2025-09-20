@@ -543,6 +543,7 @@ class ModelView(BaseModelView):
                     arranged_data[field.name] = await foreign_model.find_by_pk(
                         request, data[field.name]
                     )
+                    arranged_data[f"{field.name}_id"] = data[field.name]
             else:
                 arranged_data[field.name] = data[field.name]
         return arranged_data
