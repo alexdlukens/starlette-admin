@@ -135,6 +135,16 @@ class BaseSQLAModelConverter(BaseModelConverter):
                                 name=attr.key, type=column.type, column=column
                             )
                             converted_fields.append(converted_field)
+                        else:
+                            converted_fields.append(
+                                StringField(
+                                    name=attr.key,
+                                    help_text=column.comment,
+                                    required=not column.nullable,
+                                    exclude_from_edit=True,
+                                    read_only=True
+                                )
+                            )
         return converted_fields
 
 
