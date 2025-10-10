@@ -137,7 +137,7 @@ class BaseSQLAModelConverter(BaseModelConverter):
                             converted_fields.append(converted_field)
                         else:
                             converted_fields.append(
-                                StringField(
+                                IntegerField(
                                     name=attr.key,
                                     help_text=column.comment,
                                     required=not column.nullable,
