@@ -535,6 +535,8 @@ class ModelView(BaseModelView):
         """
         arranged_data: Dict[str, Any] = {}
         for field in self.get_fields_list(request, request.state.action):
+            if field.name not in data:
+                continue
             if isinstance(field, RelationField) and data[field.name] is not None:
                 foreign_model = self._find_foreign_model(field.identity)  # type: ignore
                 if isinstance(field, HasMany):
