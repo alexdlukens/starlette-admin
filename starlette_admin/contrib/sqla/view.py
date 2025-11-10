@@ -41,7 +41,7 @@ from starlette_admin.fields import (
 from starlette_admin.helpers import not_none, prettify_class_name, slugify_class_name
 from starlette_admin.tools import iterdecode
 from starlette_admin.views import BaseModelView
-
+import traceback
 
 class ModelView(BaseModelView):
     """A view for managing SQLAlchemy models."""
@@ -521,6 +521,8 @@ class ModelView(BaseModelView):
             await self.after_edit(request, obj)
             return obj
         except Exception as e:
+            print(data)
+            traceback.print_exc()
             self.handle_exception(e)
 
     async def _arrange_data(
